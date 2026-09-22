@@ -18,6 +18,12 @@ Every claim below is backed by code in this repo. Where something is a
 direction rather than a built thing, it's marked **planned**, not
 described as if it exists.
 
+**Live demo:** [agent-trust-lab.vercel.app](https://agent-trust-lab.vercel.app)
+— deployed on Vercel's free tier. One caveat worth stating plainly: the
+serverless filesystem there is ephemeral, so run history can reset between
+cold starts. For durable local run history, see [Running it](#running-it)
+below.
+
 ---
 
 ## Table of contents
@@ -660,6 +666,16 @@ request + injected note), run it, inspect the trace, override a context
 item and replay, or click **Auto-detect likely cause** to run the full
 causal sweep. Runs persist to `data/lab.db` (gitignored) across restarts.
 
+### Deploying it yourself
+
+The repo includes a `vercel.json` set up for Vercel's Python runtime
+(`api/main.py` as the ASGI entrypoint, `web/` bundled alongside it as
+static files). After `vercel link`, `vercel --prod` deploys it as-is. The
+one thing to know: `AGENT_TRUST_LAB_DB` is set to `/tmp/lab.db` for the
+deployed environment, since a Vercel function's filesystem is read-only
+except `/tmp` — which is also why the live demo's run history can reset
+between cold starts (see the caveat at the top of this README).
+
 Both paths are $0 to run: the engine is Python standard library only, and
 the dashboard's two dependencies (FastAPI, uvicorn) are free and
 open-source, installed into an isolated local virtualenv — never a paid
@@ -724,3 +740,7 @@ Collected in one place, everything above marked **planned**:
 - Causal provenance: counterfactual intervention, closer to causal
   inference and record-replay debugging (`rr`) than to trace summarization
 - Observability shape: OpenTelemetry GenAI semantic conventions
+
+---
+
+*Note: built with Claude (Anthropic) as a coding assistant.*
