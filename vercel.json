@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "api/main.py": {
+      "includeFiles": "web/**"
+    }
+  },
+  "env": {
+    "AGENT_TRUST_LAB_DB": "/tmp/lab.db"
+  }
+}
