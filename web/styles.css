@@ -166,7 +166,8 @@ button.secondary:hover, button.primary:hover { filter: brightness(1.12); }
 .badge.ok { background: var(--success-dim); color: var(--success); }
 .badge.bad { background: var(--danger-dim); color: var(--danger); }
 
-.columns { display: grid; grid-template-columns: 1.1fr 1fr; gap: 22px; align-items: start; }
+.columns { display: grid; grid-template-columns: 1.1fr 1fr; gap: 22px; align-items: start; min-width: 0; }
+.col { min-width: 0; }
 
 .col h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin: 0 0 10px; }
 .hint { color: var(--text-dim); font-size: 12px; margin: 0 0 10px; }
@@ -218,7 +219,8 @@ button.secondary:hover, button.primary:hover { filter: brightness(1.12); }
   padding: 8px 10px;
   font-family: var(--mono);
   font-size: 11.5px;
-  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
   color: var(--text);
 }
 .trace-event.expanded .trace-event-body { display: block; }
@@ -261,9 +263,9 @@ button.secondary:hover, button.primary:hover { filter: brightness(1.12); }
   font-size: 12px;
 }
 .result-card h4 { margin: 0 0 8px; font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
-.result-card .diff-row { display: flex; gap: 10px; margin-bottom: 6px; }
-.result-card .diff-label { width: 70px; color: var(--text-dim); }
-.result-card pre { margin: 0; background: var(--panel-2); border-radius: 6px; padding: 6px 8px; font-family: var(--mono); font-size: 11.5px; flex: 1; overflow-x: auto; }
+.result-card .diff-row { display: flex; gap: 10px; margin-bottom: 6px; min-width: 0; }
+.result-card .diff-label { width: 70px; flex-shrink: 0; color: var(--text-dim); }
+.result-card pre { margin: 0; background: var(--panel-2); border-radius: 6px; padding: 6px 8px; font-family: var(--mono); font-size: 11.5px; flex: 1; min-width: 0; white-space: pre-wrap; word-break: break-word; }
 .result-card .verdict { margin-top: 8px; font-weight: 600; }
 .result-card .verdict.changed { color: var(--danger); }
 .result-card .verdict.unchanged { color: var(--success); }
