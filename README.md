@@ -788,6 +788,7 @@ It currently demonstrates:
 - Persistent execution data
 - API and web-based inspection
 - Automated tests
+- A small ground-truth evaluation benchmark for the causal engine (`agent_trust_lab/evaluation.py`) — real measured numbers, not just a roadmap claim: `precision 1.00 / recall 1.00` on a single-sufficient-cause scenario, and `recall 0.00` on a scenario with two redundant sufficient causes, which is leave-one-out's documented blind spot demonstrated rather than only asserted
 
 The execution brain is intentionally rule-based and deterministic rather than a real LLM.
 
@@ -917,9 +918,8 @@ Move toward:
 
 Build measurable experiments around:
 
-- known causal ground truth
-- attribution precision / recall
-- interaction detection
+- ~~known causal ground truth~~ / ~~attribution precision / recall~~ — a first, small version of this now exists (`agent_trust_lab/evaluation.py`); still needed: a larger benchmark beyond two hand-authored scenarios
+- interaction detection (the current benchmark measures the blind spot, it doesn't fix it)
 - replay fidelity
 - experiment budget
 - runtime overhead
