@@ -37,6 +37,13 @@ def replay(store: ContextStore, context_ids: list, root_key: bytes,
     return refund.handle("sandbox", log, sandbox_store, live_ids, token)
 
 
+def _changed(baseline: dict, counterfactual: dict) -> bool:
+    return (
+        counterfactual.get("amount") != baseline.get("amount")
+        or counterfactual.get("status") != baseline.get("status")
+    )
+
+
 def causal_report(store: ContextStore, context_ids: list, root_key: bytes) -> dict:
     """For each context item present in the original run, remove it in
     isolation and see whether the outcome changes. Items whose removal
@@ -47,12 +54,35 @@ def causal_report(store: ContextStore, context_ids: list, root_key: bytes) -> di
     per_context = {}
     for cid in context_ids:
         counterfactual = replay(store, context_ids, root_key, override={cid: None})
-        changed = (
-            counterfactual.get("amount") != baseline.get("amount")
-            or counterfactual.get("status") != baseline.get("status")
-        )
         per_context[cid] = {
-            "causally_relevant": changed,
+            "causally_relevant": _changed(baseline, counterfactual),
             "without_this_context": counterfactual,
         }
     return {"baseline": baseline, "per_context": per_context}
+
+
+def redundant_pair_report(store: ContextStore, context_ids: list, root_key: bytes,
+                           single: Optional[dict] = None) -> dict:
+    """Leave-one-out is blind to redundant/OR-type causes: if two items are
+    each independently sufficient, removing either one alone leaves the
+    other in place and the outcome doesn't change, so neither gets flagged
+    (see evaluation.py's 'redundant_sufficient_causes' case). This runs a
+    bounded second pass: among items leave-one-out already cleared, test
+    removing every PAIR together and see if the outcome changes when
+    neither one did individually.
+
+    This is deliberately not exhaustive over all 2^n subsets — it only
+    covers pairs, and only among items already cleared individually. It
+    catches redundant pairs; it does not claim to find arbitrary
+    higher-order interactions. That's the honest scope of this pass."""
+    single = single or causal_report(store, context_ids, root_key)
+    baseline = single["baseline"]
+    not_relevant_alone = [cid for cid in context_ids if not single["per_context"][cid]["causally_relevant"]]
+
+    pairs = []
+    for i, a in enumerate(not_relevant_alone):
+        for b in not_relevant_alone[i + 1:]:
+            counterfactual = replay(store, context_ids, root_key, override={a: None, b: None})
+            if _changed(baseline, counterfactual):
+                pairs.append({"pair": [a, b], "without_both": counterfactual})
+    return {"baseline": baseline, "redundant_pairs": pairs}

@@ -789,6 +789,7 @@ It currently demonstrates:
 - API and web-based inspection
 - Automated tests
 - A small ground-truth evaluation benchmark for the causal engine (`agent_trust_lab/evaluation.py`) — real measured numbers, not just a roadmap claim: `precision 1.00 / recall 1.00` on a single-sufficient-cause scenario, and `recall 0.00` on a scenario with two redundant sufficient causes, which is leave-one-out's documented blind spot demonstrated rather than only asserted
+- A bounded pairwise intervention pass (`sandbox.py::redundant_pair_report`) that recovers from that blind spot in the redundant-cause case — `recall 0.00 → 1.00` on the same benchmark scenario — by testing pairs of items already cleared individually; exposed in both the "Redundant injection" scenario and the dashboard's causal analysis view, not just in tests
 
 The execution brain is intentionally rule-based and deterministic rather than a real LLM.
 
@@ -805,8 +806,8 @@ In particular:
 - The current replay mechanism is not complete historical replay.
 - The current brain is not a real LLM.
 - Full model prompts, model versions, retrieval state, configuration, and other real-world execution details are not yet captured.
-- Current causal analysis uses leave-one-out intervention.
-- Arbitrary multi-context interactions are not yet efficiently discovered.
+- Causal analysis is leave-one-out plus a bounded pairwise pass (`O(n^2)` over items already cleared individually) — it catches redundant *pairs*, not arbitrary higher-order interactions.
+- Triples and larger interaction groups are not yet efficiently discovered; a general search over `2^n` subsets remains infeasible and unattempted.
 - The current authority model is a controlled laboratory implementation rather than a production identity/key-management system.
 - The event log is tamper-evident, not tamper-proof.
 - The current workflow is intentionally small compared with a distributed production agent system.
