@@ -227,32 +227,50 @@ el("causal-btn").addEventListener("click", async () => {
 
 function renderCausalResult(data) {
   const relevantIds = [];
+  const redundantPairs = data.redundant_pairs || [];
+  const redundantIds = new Set(redundantPairs.flatMap(p => p.pair));
+
   document.querySelectorAll(".context-item").forEach(node => {
     const id = node.dataset.id;
     const info = data.per_context[id];
     const note = node.querySelector(".relevance-note");
-    node.classList.remove("relevant", "not-relevant");
+    node.classList.remove("relevant", "not-relevant", "redundant");
     if (!info) return;
     if (info.causally_relevant) {
       node.classList.add("relevant");
       note.className = "relevance-note relevant";
       note.textContent = `causally relevant — without this, outcome becomes ${JSON.stringify(info.without_this_context)}`;
       relevantIds.push(id);
+    } else if (redundantIds.has(id)) {
+      const pair = redundantPairs.find(p => p.pair.includes(id));
+      const partner = pair.pair.find(x => x !== id);
+      node.classList.add("redundant");
+      note.className = "relevance-note redundant";
+      note.textContent = `not relevant alone — but jointly sufficient together with ${partner} (redundant pair, found by pairwise intervention)`;
     } else {
       node.classList.add("not-relevant");
       note.className = "relevance-note not-relevant";
-      note.textContent = "not relevant — removing it does not change the outcome";
+      note.textContent = "not relevant — removing it (alone or in a pair) does not change the outcome";
     }
   });
+
+  const lines = [];
+  relevantIds.forEach(id => {
+    lines.push(`<div class="causal-line relevant"><span class="cid">${id}</span> is the likely root cause of this outcome.</div>`);
+  });
+  redundantPairs.forEach(p => {
+    lines.push(`<div class="causal-line redundant"><span class="cid">${p.pair.join(" + ")}</span> are jointly sufficient — leave-one-out missed this individually, pairwise intervention caught it.</div>`);
+  });
+  if (lines.length === 0) {
+    lines.push(`<div class="causal-line not-relevant">No single item, and no pair, changes the outcome when removed.</div>`);
+  }
 
   const card = el("causal-result");
   card.classList.remove("hidden");
   card.innerHTML = `
     <h4>Causal analysis</h4>
     <div class="diff-row"><span class="diff-label">baseline</span><pre>${escapeHtml(JSON.stringify(data.baseline))}</pre></div>
-    ${relevantIds.length > 0
-      ? relevantIds.map(id => `<div class="causal-line relevant"><span class="cid">${id}</span> is the likely root cause of this outcome.</div>`).join("")
-      : `<div class="causal-line not-relevant">No single context item, removed alone, changes the outcome.</div>`}
+    ${lines.join("")}
   `;
 }
 

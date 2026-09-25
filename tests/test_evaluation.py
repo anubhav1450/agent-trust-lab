@@ -9,18 +9,32 @@ class TestEvaluation(unittest.TestCase):
     def test_single_sufficient_cause_is_found_exactly(self):
         results = run_benchmark()
         r = self._get(results, "single_sufficient_cause")
-        self.assertEqual(r["precision"], 1.0)
-        self.assertEqual(r["recall"], 1.0)
-        self.assertEqual(r["detected"], ["c2"])
+        lo = r["leave_one_out"]
+        self.assertEqual(lo["precision"], 1.0)
+        self.assertEqual(lo["recall"], 1.0)
+        self.assertEqual(lo["detected"], ["c2"])
+        # pairwise shouldn't need to add anything here, and shouldn't hurt
+        lop = r["leave_one_out_plus_pairwise"]
+        self.assertEqual(lop["recall"], 1.0)
+        self.assertEqual(lop["redundant_pairs"], [])
 
-    def test_redundant_sufficient_causes_are_both_missed(self):
+    def test_leave_one_out_misses_redundant_causes(self):
         # This is the documented blind spot, not a bug: leave-one-out
         # cannot see a cause that's redundant with another cause.
         results = run_benchmark()
         r = self._get(results, "redundant_sufficient_causes")
-        self.assertEqual(r["recall"], 0.0)
-        self.assertEqual(r["detected"], [])
-        self.assertEqual(r["false_negatives"], ["c2", "c3"])
+        lo = r["leave_one_out"]
+        self.assertEqual(lo["recall"], 0.0)
+        self.assertEqual(lo["detected"], [])
+        self.assertEqual(lo["false_negatives"], ["c2", "c3"])
+
+    def test_pairwise_intervention_recovers_the_redundant_causes(self):
+        results = run_benchmark()
+        r = self._get(results, "redundant_sufficient_causes")
+        lop = r["leave_one_out_plus_pairwise"]
+        self.assertEqual(lop["recall"], 1.0)
+        self.assertEqual(lop["detected"], ["c2", "c3"])
+        self.assertEqual(lop["redundant_pairs"], [["c2", "c3"]])
 
 
 if __name__ == "__main__":

@@ -235,6 +235,7 @@ button.secondary:hover, button.primary:hover { filter: brightness(1.12); }
 }
 .context-item.relevant { border-color: var(--danger); }
 .context-item.not-relevant { border-color: var(--success); }
+.context-item.redundant { border-color: var(--warn); }
 
 .context-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .context-item-id { font-family: var(--mono); font-size: 12px; }
@@ -253,6 +254,7 @@ button.secondary:hover, button.primary:hover { filter: brightness(1.12); }
 .relevance-note { font-size: 11px; margin-top: 6px; color: var(--text-dim); }
 .relevance-note.relevant { color: var(--danger); }
 .relevance-note.not-relevant { color: var(--success); }
+.relevance-note.redundant { color: var(--warn); }
 
 .result-card {
   margin-top: 14px;
@@ -275,3 +277,4 @@ button.secondary:hover, button.primary:hover { filter: brightness(1.12); }
 .causal-line .cid { font-family: var(--mono); font-weight: 700; }
 .causal-line.relevant .cid { color: var(--danger); }
 .causal-line.not-relevant .cid { color: var(--success); }
+.causal-line.redundant .cid { color: var(--warn); }

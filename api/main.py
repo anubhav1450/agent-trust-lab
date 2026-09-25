@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from agent_trust_lab.orchestrator import Pipeline
 from agent_trust_lab.eventlog import EventLog
-from agent_trust_lab.sandbox import replay, causal_report
+from agent_trust_lab.sandbox import replay, causal_report, redundant_pair_report
 from agent_trust_lab import scenarios, storage
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -47,6 +47,9 @@ SCENARIO_CATALOG = [
      "description": "An untrusted note tries to push the refund from 500 to 50000."},
     {"id": "forged_token", "label": "Compromised sub-agent",
      "description": "The refund agent mints its own authority token, bypassing the signer."},
+    {"id": "redundant", "label": "Redundant injection",
+     "description": "Two independently-sufficient malicious notes. Leave-one-out misses both; "
+                     "pairwise intervention catches them as a redundant pair."},
     {"id": "custom", "label": "Custom",
      "description": "Type your own request amount and an optional injected note."},
 ]
@@ -59,6 +62,8 @@ def _build_scenario(req: NewRunRequest):
         return scenarios.prompt_injection_attack(), False
     if req.scenario == "forged_token":
         return scenarios.compromised_subagent_forges_token(), True
+    if req.scenario == "redundant":
+        return scenarios.redundant_injection_attack(), False
     if req.scenario == "custom":
         return scenarios.custom_scenario(req.user_amount or 0, req.injected_note), bool(req.forge_attack)
     raise HTTPException(400, f"unknown scenario '{req.scenario}'")
@@ -140,7 +145,9 @@ def causal_run(run_id: str):
     ctx = storage.load_run_context(DB_PATH, run_id)
     if ctx is None:
         raise HTTPException(404, "run not found")
-    return causal_report(ctx["store"], ctx["context_ids"], ROOT_KEY)
+    single = causal_report(ctx["store"], ctx["context_ids"], ROOT_KEY)
+    pairwise = redundant_pair_report(ctx["store"], ctx["context_ids"], ROOT_KEY, single=single)
+    return {**single, "redundant_pairs": pairwise["redundant_pairs"]}
 
 
 @app.delete("/api/runs")
