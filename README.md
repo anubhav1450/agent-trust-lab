@@ -790,12 +790,62 @@ It currently demonstrates:
 - Automated tests
 - A small ground-truth evaluation benchmark for the causal engine (`agent_trust_lab/evaluation.py`) — real measured numbers, not just a roadmap claim: `precision 1.00 / recall 1.00` on a single-sufficient-cause scenario, and `recall 0.00` on a scenario with two redundant sufficient causes, which is leave-one-out's documented blind spot demonstrated rather than only asserted
 - A bounded pairwise intervention pass (`sandbox.py::redundant_pair_report`) that recovers from that blind spot in the redundant-cause case — `recall 0.00 → 1.00` on the same benchmark scenario — by testing pairs of items already cleared individually; exposed in both the "Redundant injection" scenario and the dashboard's causal analysis view, not just in tests
+- An optional LLM brain for the Refund Agent (`agent_trust_lab/llm.py`, `brains.py::LLMBrain`): a real model, called through an OpenAI-compatible API, returns a JSON decision. Output that breaks the contract fails closed to `noop`. A failed model call is an explicit error and is never replaced by a rule-based answer
+- Recorded model calls (`storage.py`): the raw response to each distinct request is stored under a hash of the exact request (endpoint, model, prompt and generation settings, never the API key), and an identical request reuses it instead of calling the model again
+- An explicit `noop` outcome: when the Refund Agent decides not to act, the Payment API is not called and no ledger entry is made
 
-The execution brain is intentionally rule-based and deterministic rather than a real LLM.
+The Refund Agent's decision comes from one of two brains, chosen per run and stored with the run:
 
-This is a deliberate engineering choice for the current stage.
+- **Rule-based** (the default): deterministic, free, and needs no API key.
+- **LLM**: a real model. Only the Refund Agent uses it. The Support Agent stays rule-based, because its delegation cap comes from trusted input rather than from a decision.
 
-The surrounding system can therefore be tested without introducing model nondeterminism before the underlying execution and investigation mechanisms are understood.
+The system started rule-based so that authority, logging, replay and intervention could be tested without model nondeterminism. The LLM brain was added behind the same interface afterwards.
+
+Four distinctions matter when reading results from LLM runs:
+
+- A real LLM is nondeterministic across live calls. The same request can get a different answer next time.
+- A recorded response makes a *matching* request reproducible: replaying an unchanged run reads the recording. A counterfactual that changes the context is a new request, and needs a live model call the first time.
+- Reusing a recorded response is not the same as reconstructing every detail of a historical execution. Only the request and the raw response are kept.
+- Authorization stays deterministic and independent of the model's output. The model proposes an amount; the Payment API checks the delegated capability either way.
+
+A run is always replayed and analysed with the brain it was created with. An LLM run is never re-executed with the rule-based brain.
+
+### Running it locally
+
+The engine and its tests need only Python. No network and no API key:
+
+```bash
+python3 -m agent_trust_lab.cli
+python3 -m unittest discover -v
+```
+
+The dashboard needs two packages:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/uvicorn api.main:app --port 8420
+```
+
+Then open `http://127.0.0.1:8420`. Started this way, it runs in rule-based mode and the LLM option is disabled.
+
+To enable LLM mode, create a `.env` file in the project root (it is gitignored) and start the server with it:
+
+```bash
+.venv/bin/uvicorn api.main:app --env-file .env --port 8420
+```
+
+| Variable | Required | Meaning |
+|---|---|---|
+| `ATL_LLM_API_KEY` | for LLM mode | API key for the model provider |
+| `ATL_LLM_MODEL` | no | Model identifier. Default: `openai/gpt-oss-20b` |
+| `ATL_LLM_BASE_URL` | no | Any OpenAI-compatible endpoint. Default: Groq's |
+| `ATL_LLM_CALLS_PER_HOUR` | no | Cap on live model calls per server process. Default: 40 |
+| `ATL_LLM_REQUEST_BUDGET_SECONDS` | no | Time allowed for model calls within one request. Default: 25 |
+
+The server refuses to start if `--env-file` names a file that does not exist. The key is read by the server only; no endpoint returns it.
+
+The hourly cap exists because a public demo shares one key. It is best-effort: the count is kept in the memory of one server process, so it resets on restart and separate instances count separately. When it is reached, LLM requests fail with a clear message, and nothing switches to rule-based mode on its own.
 
 ## Current Limitations
 
@@ -804,8 +854,11 @@ The current system is not a complete solution to autonomous-agent trust.
 In particular:
 
 - The current replay mechanism is not complete historical replay.
-- The current brain is not a real LLM.
-- Full model prompts, model versions, retrieval state, configuration, and other real-world execution details are not yet captured.
+- LLM mode is one decision by one agent. There is no multi-turn conversation, tool-calling loop, memory or retrieval.
+- For LLM runs, the prompt, model identifier, generation settings and raw response are captured. Token usage, latency, the model's reasoning text, retrieval state and provider-side model revisions are not.
+- Recorded responses do not expire, and a model identifier can point to different weights over time. A recording says what the model answered then, not what it would answer now.
+- The prompt tells the model to treat context as evidence rather than instructions. That is a prompt-level defence, not a security guarantee, and nothing depends on it.
+- The public demo's LLM usage cap is best-effort, as described above.
 - Causal analysis is leave-one-out plus a bounded pairwise pass (`O(n^2)` over items already cleared individually) — it catches redundant *pairs*, not arbitrary higher-order interactions.
 - Triples and larger interaction groups are not yet efficiently discovered; a general search over `2^n` subsets remains infeasible and unattempted.
 - The current authority model is a controlled laboratory implementation rather than a production identity/key-management system.
@@ -906,7 +959,7 @@ Move toward:
 
 - richer execution evidence
 - historical replay
-- real LLM execution
+- ~~real LLM execution~~ — a first version now exists: one agent's decision made by a real model, with recorded responses (see Current Implementation); still open: multi-turn agents, tool-calling loops, and measuring how often a real model follows injected instructions
 - stronger multi-hop delegation
 - realistic tool interactions
 - state snapshots

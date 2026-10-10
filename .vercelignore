@@ -3,3 +3,5 @@ data
 __pycache__
 tests
 *.pyc
+.env*
+.DS_Store

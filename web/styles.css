@@ -183,8 +183,10 @@ button.secondary:hover, button.primary:hover { filter: brightness(1.12); }
 
 .trace-event-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  row-gap: 4px;
   padding: 8px 10px;
   cursor: pointer;
   font-size: 12px;
@@ -278,3 +280,31 @@ button.secondary:hover, button.primary:hover { filter: brightness(1.12); }
 .causal-line.relevant .cid { color: var(--danger); }
 .causal-line.not-relevant .cid { color: var(--success); }
 .causal-line.redundant .cid { color: var(--warn); }
+
+/* A decision not to act: neither a success nor a blocked attack. */
+.badge.neutral { background: var(--panel-2); color: var(--text-dim); border: 1px solid var(--border); }
+
+.mini-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.mini-badge.llm { color: var(--accent); border-color: var(--accent-dim); }
+.mini-badge.recording { color: var(--success); border-color: var(--success-dim); }
+.mini-badge.invalid { color: var(--warn); border-color: var(--warn); }
+
+.inline-error {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  background: var(--danger-dim);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.calls-note { margin-top: 8px; color: var(--text-dim); font-size: 11px; }

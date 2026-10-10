@@ -9,8 +9,14 @@ const el = (id) => document.getElementById(id);
 async function api(path, opts) {
   const res = await fetch(API + path, opts);
   if (!res.ok) {
+    // The server sends errors as {"detail": "..."}; show that sentence, not raw JSON.
     const body = await res.text();
-    throw new Error(`${res.status} ${body}`);
+    let message = body || `Request failed (${res.status})`;
+    try {
+      const detail = JSON.parse(body).detail;
+      if (detail) message = typeof detail === "string" ? detail : JSON.stringify(detail);
+    } catch (_) { /* not JSON: keep the raw body */ }
+    throw new Error(message);
   }
   return res.json();
 }
@@ -19,8 +25,43 @@ function fmtTime(ts) {
   return new Date(ts * 1000).toLocaleTimeString();
 }
 
-function statusOf(run) {
-  return run.final_status || "unknown";
+function showError(id, message) {
+  const node = el(id);
+  node.textContent = message;
+  node.classList.remove("hidden");
+}
+
+function clearError(id) {
+  el(id).classList.add("hidden");
+}
+
+// ---------- brain selector ----------
+
+let brainHints = { rule: "", llm: "" };
+
+async function loadConfig() {
+  const select = el("brain-select");
+  select.addEventListener("change", updateBrainDesc);
+  let config = { llm_configured: false };
+  try {
+    config = await api("/api/config");
+  } catch (_) { /* leave LLM mode disabled */ }
+
+  const option = select.querySelector('option[value="llm"]');
+  option.disabled = !config.llm_configured;
+  option.textContent = config.llm_configured ? `LLM (${config.llm_model})` : "LLM (not configured)";
+  brainHints = {
+    rule: "A fixed rule decides. Same answer on every run."
+      + (config.llm_configured ? "" : " LLM mode is off on this server: no API key is configured."),
+    llm: "A real model decides, and its answer is not trusted: the Payment API still checks authority. "
+      + `Shared demo key, limited to about ${config.llm_calls_per_hour} live calls per hour (best effort). `
+      + "Identical requests reuse a recorded answer.",
+  };
+  updateBrainDesc();
+}
+
+function updateBrainDesc() {
+  el("brain-desc").textContent = brainHints[el("brain-select").value] || "";
 }
 
 // ---------- scenario form ----------
@@ -45,9 +86,10 @@ el("new-run-form").addEventListener("submit", async (e) => {
   const btn = el("run-btn");
   btn.disabled = true;
   btn.textContent = "Running...";
+  clearError("form-error");
   try {
     const scenario = el("scenario-select").value;
-    const body = { scenario };
+    const body = { scenario, brain: el("brain-select").value };
     if (scenario === "custom") {
       body.user_amount = parseFloat(el("user-amount").value || "0");
       body.injected_note = el("injected-note").value || null;
@@ -61,7 +103,7 @@ el("new-run-form").addEventListener("submit", async (e) => {
     await loadRunList();
     await selectRun(run_id);
   } catch (err) {
-    alert("Run failed: " + err.message);
+    showError("form-error", err.message);
   } finally {
     btn.disabled = false;
     btn.textContent = "Run workflow";
@@ -79,7 +121,7 @@ async function loadRunList() {
   }
   list.innerHTML = runs.map(r => `
     <div class="run-item ${r.run_id === currentRunId ? "active" : ""}" data-run-id="${r.run_id}">
-      <span class="run-item-scenario">${r.scenario}</span>
+      <span class="run-item-scenario">${r.scenario}${r.brain === "llm" ? ' <span class="mini-badge llm">LLM</span>' : ""}</span>
       <span class="run-item-id">${r.run_id.slice(0, 8)}</span>
     </div>
   `).join("");
@@ -98,17 +140,20 @@ async function selectRun(runId) {
   el("run-detail").classList.remove("hidden");
   el("replay-result").classList.add("hidden");
   el("causal-result").classList.add("hidden");
+  clearError("action-error");
 
   document.querySelectorAll(".run-item").forEach(n => n.classList.toggle("active", n.dataset.runId === runId));
 
   el("run-scenario-label").textContent = currentRunData.scenario;
+  el("run-brain-label").textContent = currentRunData.brain === "llm" ? "LLM brain" : "rule-based brain";
   el("run-id-label").textContent = runId;
 
   const finalEvent = currentRunData.events.find(e => e.event_type === "final_result");
   const status = finalEvent ? finalEvent.payload.status : "unknown";
   const statusBadge = el("status-badge");
-  statusBadge.textContent = status;
-  statusBadge.className = "badge " + (status === "executed" ? "ok" : "bad");
+  // "noop" is neither a success nor a blocked attack: the agent chose not to act.
+  statusBadge.textContent = status === "noop" ? "noop (no action taken)" : status;
+  statusBadge.className = "badge " + ({ executed: "ok", denied: "bad", noop: "neutral" }[status] || "bad");
 
   const integrityBadge = el("integrity-badge");
   integrityBadge.textContent = currentRunData.integrity_ok ? "log integrity OK" : "log TAMPERED";
@@ -118,12 +163,22 @@ async function selectRun(runId) {
   renderContext(currentRunData.context_items);
 }
 
+function decisionBadges(e) {
+  const llm = e.event_type === "decision" && e.payload.llm;
+  if (!llm) return "";
+  let html = '<span class="mini-badge llm">LLM</span>';
+  if (llm.from_recording) html += '<span class="mini-badge recording">from recording</span>';
+  if (llm.validation_error) html += '<span class="mini-badge invalid">invalid output, failed closed</span>';
+  return html;
+}
+
 function renderTrace(events) {
   el("trace-list").innerHTML = events.map((e, i) => `
     <div class="trace-event" data-idx="${i}">
       <div class="trace-event-head">
         <span class="agent-chip ${e.agent_id}">${e.agent_id}</span>
         <span class="event-type ${e.event_type}">${e.event_type}</span>
+        ${decisionBadges(e)}
         <span class="hint">${fmtTime(e.ts)}</span>
       </div>
       <div class="trace-event-body"><pre>${escapeHtml(JSON.stringify(e.payload, null, 2))}</pre></div>
@@ -183,18 +238,39 @@ function collectOverrides() {
 
 el("replay-btn").addEventListener("click", async () => {
   if (!currentRunId) return;
+  clearError("action-error");
   const overrides = collectOverrides();
   if (Object.keys(overrides).length === 0) {
-    alert("Check at least one context item to override before replaying.");
+    showError("action-error", "Check at least one context item to override before replaying.");
     return;
   }
-  const data = await api(`/api/runs/${currentRunId}/replay`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ overrides }),
-  });
-  renderReplayResult(data);
+  const btn = el("replay-btn");
+  btn.disabled = true;
+  try {
+    const data = await api(`/api/runs/${currentRunId}/replay`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ overrides }),
+    });
+    renderReplayResult(data);
+  } catch (err) {
+    // A failed replay must not leave an older result looking like this one's.
+    el("replay-result").classList.add("hidden");
+    showError("action-error", err.message);
+  } finally {
+    btn.disabled = false;
+  }
 });
+
+// For LLM runs: how many answers needed a live model call, and how many were recordings.
+function modelCallsNote(data) {
+  if (data.brain !== "llm") return "";
+  const n = data.live_model_calls;
+  const text = n === 0
+    ? "Model calls: none. Every answer came from a recording."
+    : `Model calls: ${n} live. Any others came from recordings.`;
+  return `<div class="calls-note">${text}</div>`;
+}
 
 function renderReplayResult(data) {
   const card = el("replay-result");
@@ -206,6 +282,7 @@ function renderReplayResult(data) {
     <div class="verdict ${data.outcome_changed ? "changed" : "unchanged"}">
       ${data.outcome_changed ? "Outcome changed — this override altered the result." : "Outcome unchanged — this override did not affect the result."}
     </div>
+    ${modelCallsNote(data)}
   `;
 }
 
@@ -216,9 +293,13 @@ el("causal-btn").addEventListener("click", async () => {
   const btn = el("causal-btn");
   btn.disabled = true;
   btn.textContent = "Analyzing...";
+  clearError("action-error");
   try {
     const data = await api(`/api/runs/${currentRunId}/causal`);
     renderCausalResult(data);
+  } catch (err) {
+    el("causal-result").classList.add("hidden");
+    showError("action-error", err.message);
   } finally {
     btn.disabled = false;
     btn.textContent = "Auto-detect likely cause";
@@ -271,6 +352,7 @@ function renderCausalResult(data) {
     <h4>Causal analysis</h4>
     <div class="diff-row"><span class="diff-label">baseline</span><pre>${escapeHtml(JSON.stringify(data.baseline))}</pre></div>
     ${lines.join("")}
+    ${modelCallsNote(data)}
   `;
 }
 
@@ -278,5 +360,6 @@ function renderCausalResult(data) {
 
 (async function init() {
   await loadScenarios();
+  await loadConfig();
   await loadRunList();
 })();

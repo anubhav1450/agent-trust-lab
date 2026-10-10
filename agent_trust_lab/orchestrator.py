@@ -1,20 +1,24 @@
 """Runs the full pipeline and returns a run_id you can inspect / replay."""
 import uuid
+from typing import Optional
 from .capability import TokenAuthority, Token
 from .context import ContextStore
 from .eventlog import EventLog
 from .agents import SupportAgent, RefundAgent, PaymentAPI
-from .brains import RuleBasedBrain
+from .brains import Brain, RuleBasedBrain
 
 
 class Pipeline:
-    def __init__(self, root_key: bytes = b"demo-root-key-do-not-use-in-prod", db_path: str = ":memory:"):
+    def __init__(self, root_key: bytes = b"demo-root-key-do-not-use-in-prod", db_path: str = ":memory:",
+                 refund_brain: Optional[Brain] = None):
         self.authority = TokenAuthority(root_key)
         self.log = EventLog(db_path)
         self.payment_api = PaymentAPI(self.authority)
         root_token = self.authority.issue_root("support_agent", scope="refund", max_amount=1_000_000)
+        # Only the Refund Agent's brain is swappable. The Support Agent's
+        # delegation cap comes from trusted input, not from its brain.
         self.support_agent = SupportAgent(self.authority, root_token, RuleBasedBrain())
-        self.refund_agent = RefundAgent(self.authority, RuleBasedBrain(), self.payment_api)
+        self.refund_agent = RefundAgent(self.authority, refund_brain or RuleBasedBrain(), self.payment_api)
 
     def run(self, store: ContextStore, context_ids: list, forge_attack: bool = False) -> str:
         run_id = str(uuid.uuid4())

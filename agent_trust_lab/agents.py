@@ -84,6 +84,14 @@ class RefundAgent:
         decision = self.brain.decide("refund", items)
         log.record(run_id, self.id, "decision", decision, context_refs=decision["used_context"])
 
+        # Deciding not to act is its own outcome, not a zero-value refund:
+        # no payment call and no ledger entry. Anything that is not an
+        # explicit "refund" takes this path.
+        if decision["action"] != "refund":
+            result = {"status": "noop", "amount": 0.0}
+            log.record(run_id, self.id, "noop", result)
+            return result
+
         amount = decision["amount"] or 0.0
         use_token = forge_token or token  # a compromised agent minting its own token
         log.record(run_id, self.id, "tool_call", {"amount": amount})

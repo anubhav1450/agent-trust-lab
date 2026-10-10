@@ -24,6 +24,13 @@
           <select id="scenario-select"></select>
           <p class="scenario-desc" id="scenario-desc"></p>
 
+          <label for="brain-select">Refund Agent brain</label>
+          <select id="brain-select">
+            <option value="rule" selected>Rule-based (deterministic)</option>
+            <option value="llm" disabled>LLM</option>
+          </select>
+          <p class="scenario-desc" id="brain-desc"></p>
+
           <div id="custom-fields" class="hidden">
             <label>Refund amount requested (trusted)</label>
             <input id="user-amount" type="number" value="500" step="1" />
@@ -36,6 +43,7 @@
           </div>
 
           <button type="submit" id="run-btn">Run workflow</button>
+          <p id="form-error" class="inline-error hidden" role="alert"></p>
         </form>
       </section>
 
@@ -55,6 +63,7 @@
           <div>
             <div class="run-title">
               <span id="run-scenario-label" class="tag"></span>
+              <span id="run-brain-label" class="tag"></span>
               <code id="run-id-label"></code>
             </div>
             <div class="run-badges">
@@ -79,6 +88,7 @@
               <button id="replay-btn" class="secondary">Replay with overrides</button>
               <button id="causal-btn" class="primary">Auto-detect likely cause</button>
             </div>
+            <p id="action-error" class="inline-error hidden" role="alert"></p>
 
             <div id="replay-result" class="result-card hidden"></div>
             <div id="causal-result" class="result-card hidden"></div>

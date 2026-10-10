@@ -4,3 +4,4 @@ __pycache__/
 data/*.db
 .vercel
 .env*
+.DS_Store

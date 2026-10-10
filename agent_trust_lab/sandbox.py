@@ -7,15 +7,21 @@ from typing import Dict, Optional
 from .context import ContextStore, ContextItem
 from .eventlog import EventLog
 from .agents import SupportAgent, RefundAgent, PaymentAPI
-from .brains import RuleBasedBrain
+from .brains import Brain, RuleBasedBrain
 from .capability import TokenAuthority
 
 
 def replay(store: ContextStore, context_ids: list, root_key: bytes,
-           override: Optional[Dict[str, Optional[str]]] = None) -> dict:
+           override: Optional[Dict[str, Optional[str]]] = None,
+           refund_brain: Optional[Brain] = None) -> dict:
     """Re-runs the pipeline in an isolated sandbox (fresh authority, fresh
     ledger, fresh log). `override` maps a context_id to either replacement
-    text, or None to remove that item entirely."""
+    text, or None to remove that item entirely.
+
+    `refund_brain` must be the kind of brain the original run used. With an
+    LLMBrain that has a recording store, an unchanged request is answered
+    from its recording; an override that changes the prompt is a new request
+    and needs a live model call."""
     override = override or {}
     sandbox_store = ContextStore()
     for cid in context_ids:
@@ -30,7 +36,7 @@ def replay(store: ContextStore, context_ids: list, root_key: bytes,
     payment_api = PaymentAPI(authority)
     root_token = authority.issue_root("support_agent", scope="refund", max_amount=1_000_000)
     support = SupportAgent(authority, root_token, RuleBasedBrain())
-    refund = RefundAgent(authority, RuleBasedBrain(), payment_api)
+    refund = RefundAgent(authority, refund_brain or RuleBasedBrain(), payment_api)
 
     live_ids = [c for c in context_ids if c in sandbox_store.all_ids()]
     _, token = support.handle("sandbox", log, sandbox_store, live_ids)
@@ -44,16 +50,17 @@ def _changed(baseline: dict, counterfactual: dict) -> bool:
     )
 
 
-def causal_report(store: ContextStore, context_ids: list, root_key: bytes) -> dict:
+def causal_report(store: ContextStore, context_ids: list, root_key: bytes,
+                  refund_brain: Optional[Brain] = None) -> dict:
     """For each context item present in the original run, remove it in
     isolation and see whether the outcome changes. Items whose removal
     changes status/amount are causally relevant to the outcome — this is
     the counterfactual-intervention version of provenance, not a
     text-summarization one."""
-    baseline = replay(store, context_ids, root_key)
+    baseline = replay(store, context_ids, root_key, refund_brain=refund_brain)
     per_context = {}
     for cid in context_ids:
-        counterfactual = replay(store, context_ids, root_key, override={cid: None})
+        counterfactual = replay(store, context_ids, root_key, override={cid: None}, refund_brain=refund_brain)
         per_context[cid] = {
             "causally_relevant": _changed(baseline, counterfactual),
             "without_this_context": counterfactual,
@@ -62,7 +69,8 @@ def causal_report(store: ContextStore, context_ids: list, root_key: bytes) -> di
 
 
 def redundant_pair_report(store: ContextStore, context_ids: list, root_key: bytes,
-                           single: Optional[dict] = None) -> dict:
+                           single: Optional[dict] = None,
+                           refund_brain: Optional[Brain] = None) -> dict:
     """Leave-one-out is blind to redundant/OR-type causes: if two items are
     each independently sufficient, removing either one alone leaves the
     other in place and the outcome doesn't change, so neither gets flagged
@@ -75,14 +83,15 @@ def redundant_pair_report(store: ContextStore, context_ids: list, root_key: byte
     covers pairs, and only among items already cleared individually. It
     catches redundant pairs; it does not claim to find arbitrary
     higher-order interactions. That's the honest scope of this pass."""
-    single = single or causal_report(store, context_ids, root_key)
+    single = single or causal_report(store, context_ids, root_key, refund_brain=refund_brain)
     baseline = single["baseline"]
     not_relevant_alone = [cid for cid in context_ids if not single["per_context"][cid]["causally_relevant"]]
 
     pairs = []
     for i, a in enumerate(not_relevant_alone):
         for b in not_relevant_alone[i + 1:]:
-            counterfactual = replay(store, context_ids, root_key, override={a: None, b: None})
+            counterfactual = replay(store, context_ids, root_key, override={a: None, b: None},
+                                    refund_brain=refund_brain)
             if _changed(baseline, counterfactual):
                 pairs.append({"pair": [a, b], "without_both": counterfactual})
     return {"baseline": baseline, "redundant_pairs": pairs}
