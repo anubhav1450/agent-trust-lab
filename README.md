@@ -4,6 +4,10 @@
 
 Agent Trust Lab is an engineering laboratory for investigating trust, delegated authority, execution replay, and causal failure analysis in autonomous multi-agent workflows.
 
+**Live demo:** [agent-trust-lab.vercel.app](https://agent-trust-lab.vercel.app). It runs in the browser, with nothing to install. You can run an attack, read the recorded trace, replay it with one piece of context changed, and switch the deciding agent between a rule and a real LLM.
+
+**New here? Start with the [tutorial](tutorial/README.md).** It walks through the live demo step by step in plain language, with screenshots and flow diagrams, and needs no technical background. This README then covers how each part is implemented and what is not built yet.
+
 The project starts with a simple workflow:
 
 ```mermaid
